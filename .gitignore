@@ -1,0 +1,52 @@
+# Environment / secrets — never commit these
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.secret
+
+# Keep example files (they have no real values)
+!.env.example
+!**/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Node / Expo / React Native
+node_modules/
+.expo/
+dist/
+web-build/
+*.orig.*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+
+# Logs
+*.log
+logs/
