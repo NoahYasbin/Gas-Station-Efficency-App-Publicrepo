@@ -1,14 +1,10 @@
 import logging
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ..schemas import RecommendRequest, RecommendResponse, StationOut
-from ..services.gas_price_service import get_stations_with_prices
-from ..services.routing_service import (
+from schemas import RecommendRequest, RecommendResponse, StationOut
+from services.gas_price_service import get_stations_with_prices
+from services.routing_service import (
     get_location_from_ip,
     reverse_geocode,
     get_driving_distances,

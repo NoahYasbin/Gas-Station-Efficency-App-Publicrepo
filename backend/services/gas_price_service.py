@@ -9,26 +9,29 @@ import logging
 
 import httpx
 
-from ..cache import price_cache
-from ..config import settings
+from cache import price_cache
+from config import settings
 
 log = logging.getLogger("gas_app.prices")
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
 
 # State average regular gas prices (USD/gal) — based on EIA weekly data
 _STATE_PRICES: dict[str, float] = {
-    "AL": 3.05, "AK": 4.15, "AZ": 3.60, "AR": 3.00, "CA": 4.80,
-    "CO": 3.55, "CT": 3.85, "DE": 3.55, "FL": 3.35, "GA": 3.15,
-    "HI": 4.90, "ID": 3.65, "IL": 3.75, "IN": 3.35, "IA": 3.25,
-    "KS": 3.15, "KY": 3.20, "LA": 3.05, "ME": 3.75, "MD": 3.60,
-    "MA": 3.85, "MI": 3.50, "MN": 3.40, "MS": 3.05, "MO": 3.15,
-    "MT": 3.60, "NE": 3.25, "NV": 4.05, "NH": 3.70, "NJ": 3.65,
-    "NM": 3.55, "NY": 3.85, "NC": 3.25, "ND": 3.25, "OH": 3.45,
-    "OK": 3.05, "OR": 4.15, "PA": 3.75, "RI": 3.80, "SC": 3.10,
-    "SD": 3.30, "TN": 3.15, "TX": 3.05, "UT": 3.75, "VT": 3.75,
-    "VA": 3.45, "WA": 4.45, "WV": 3.35, "WI": 3.40, "WY": 3.50,
-    "DC": 3.95,
+    "AL": 3.55, "AK": 4.65, "AZ": 4.10, "AR": 3.50, "CA": 5.30,
+    "CO": 4.05, "CT": 4.35, "DE": 4.05, "FL": 3.85, "GA": 3.65,
+    "HI": 5.40, "ID": 4.15, "IL": 4.25, "IN": 3.85, "IA": 3.75,
+    "KS": 3.65, "KY": 3.70, "LA": 3.55, "ME": 4.25, "MD": 4.10,
+    "MA": 4.35, "MI": 4.00, "MN": 3.90, "MS": 3.55, "MO": 3.65,
+    "MT": 4.10, "NE": 3.75, "NV": 4.55, "NH": 4.20, "NJ": 4.15,
+    "NM": 4.05, "NY": 4.35, "NC": 3.75, "ND": 3.75, "OH": 3.95,
+    "OK": 3.55, "OR": 4.65, "PA": 4.25, "RI": 4.30, "SC": 3.60,
+    "SD": 3.80, "TN": 3.65, "TX": 3.55, "UT": 4.25, "VT": 4.25,
+    "VA": 3.95, "WA": 4.95, "WV": 3.85, "WI": 3.90, "WY": 4.00,
+    "DC": 4.45,
 }
 
 _GRADE_ADDER: dict[str, float] = {
@@ -120,25 +123,33 @@ async def get_stations_with_prices(
 
     radius_m = int(radius_miles * 1609)
     query = (
-        f'[out:json][timeout:15];'
+        f'[out:json][timeout:25];'
         f'(node["amenity"="fuel"](around:{radius_m},{lat},{lng});'
         f'way["amenity"="fuel"](around:{radius_m},{lat},{lng}););'
         f'out center 30;'
     )
 
     log.info("Querying Overpass: lat=%.4f lng=%.4f radius=%dm", lat, lng, radius_m)
+    body = None
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            OVERPASS_URL,
-            data={"data": query},
-            headers={"User-Agent": "GasApp/1.0"},
-            timeout=25.0,
-        )
-        log.info("Overpass HTTP %s", response.status_code)
-        if not response.is_success:
-            log.error("Overpass error: %s", response.text[:300])
-        response.raise_for_status()
-        body = response.json()
+        for endpoint in OVERPASS_ENDPOINTS:
+            try:
+                response = await client.post(
+                    endpoint,
+                    data={"data": query},
+                    headers={"User-Agent": "GasApp/1.0"},
+                    timeout=40.0,
+                )
+                log.info("Overpass HTTP %s from %s", response.status_code, endpoint)
+                if response.is_success:
+                    body = response.json()
+                    break
+                log.warning("Overpass endpoint %s returned %s", endpoint, response.status_code)
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                log.warning("Overpass endpoint %s failed: %s — trying next", endpoint, e)
+
+    if body is None:
+        raise ValueError("All Overpass endpoints timed out. Try again in a moment.")
 
     elements = body.get("elements", [])
     log.info("Overpass returned %d elements", len(elements))
